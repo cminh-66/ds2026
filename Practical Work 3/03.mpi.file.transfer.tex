@@ -1,0 +1,138 @@
+\documentclass{article}
+\usepackage[utf8]{inputenc}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{listings}
+\usepackage{geometry}
+\usepackage{xcolor}
+
+\geometry{a4paper, margin=1in}
+
+\lstset{
+    language=C,
+    basicstyle=\small\ttfamily,
+    numbers=left,
+    numberstyle=\tiny\color{gray},
+    keywordstyle=\color{blue},
+    stringstyle=\color{red!80!black},
+    commentstyle=\color{green!50!black},
+    showstringspaces=false,
+    breaklines=true,
+    captionpos=b,
+    frame=lines,
+    framesep=5pt,
+    framerule=0.5pt,
+    tabsize=2,
+}
+
+\title{Practical Work 3 - MPI File Transfer}
+\author{Tran Vu Cong Minh - 23BI14303}
+\date{\today}
+
+\begin{document}
+
+\maketitle
+
+\section{Goal of the practical work}
+The primary objective of this laboratory session is to implement a mechanism for \textbf{one-to-one file transfer} utilizing the Message Passing Interface (MPI). Unlike the approaches taken in previous practical works—such as low-level sockets (PW1) or Remote Procedure Calls (PW2)—this implementation relies on explicit message passing between distinct MPI processes to exchange data.
+
+The specific goals were to:
+\begin{itemize}
+    \item Install and configure the necessary MPI environment.
+    \item Architect a basic server-client model defined by MPI process ranks.
+    \item Execute a file transfer between two distinct MPI nodes.
+    \item Evaluate and compare this MPI-based approach against previous TCP and RPC implementations.
+\end{itemize}
+
+\section{Environment setup}
+The experiments were conducted within the same Kali Linux virtual machine environment established during earlier sessions.
+
+\subsection{OpenMPI installation}
+The OpenMPI library was installed and verified using the following commands:
+\begin{verbatim}
+sudo apt update
+sudo apt install openmpi-bin libopenmpi-dev
+mpicc -v
+mpirun --version
+\end{verbatim}
+
+\section{MPI design for file transfer}
+\subsection{Rank-based architecture}
+The system architecture adopts a server-client model distinguished by MPI ranks:
+\begin{itemize}
+    \item \textbf{Rank 0 (Server)}: Responsible for reading the source file and transmitting both the file size and its content.
+    \item \textbf{Rank 1 (Client)}: Responsible for receiving the metadata (size) and content, and subsequently writing the data to an output file.
+\end{itemize}
+The application is executed using \texttt{mpirun}, invoking two processes:
+\begin{verbatim}
+mpirun -np 2 ./mpi_file_transfer input_file output_file
+\end{verbatim}
+
+\subsection{Message format}
+The communication protocol involves a strictly ordered exchange:
+\begin{itemize}
+    \item Rank 0 first transmits the file size as an integer.
+    \item Rank 0 then transmits the actual file payload as \texttt{MPI\_BYTE}.
+    \item Rank 1 waits to receive the size, allocates the necessary memory buffer, receives the payload, and commits the data to disk.
+\end{itemize}
+
+\section{System organization and Implementation}
+The entire implementation is encapsulated within a single C source file named \texttt{mpi\_file\_transfer.c}.
+
+The program flow begins by initializing the MPI environment, validating command-line arguments, and determining the rank of the current process. Based on the rank, the program diverges into either server or client logic.
+
+\subsubsection{Server Logic (Rank 0)}
+\begin{itemize}
+    \item Opens and reads the specified input file.
+    \item Calculates the total size of the file.
+    \item Dispatches the file size followed by the file content to Rank 1.
+\end{itemize}
+
+\subsubsection{Client Logic (Rank 1)}
+\begin{itemize}
+    \item Listens for the incoming file size message.
+    \item Listens for the incoming data stream.
+    \item Writes the received data to the specified output path.
+\end{itemize}
+
+\section{Build commands}
+The source code was compiled using the MPI C compiler wrapper:
+\begin{verbatim}
+mpicc -Wall -g mpi_file_transfer.c -o mpi_file_transfer
+\end{verbatim}
+A typical execution command to test the system is as follows:
+\begin{verbatim}
+mpirun -np 2 ./mpi_file_transfer example.txt result.txt
+\end{verbatim}
+
+\section{Execution and test results}
+To verify functionality, a test file containing a simple string was created:
+\begin{verbatim}
+echo "Hello from MPI server" > example.txt
+\end{verbatim}
+Upon running the MPI program, the standard output confirmed the transmission flow:
+\begin{verbatim}
+[Sender] Read 22 bytes from 'example.txt', transmitting to receiver...
+[Sender] Transmission completed successfully.
+[Receiver] Successfully received 22 bytes and saved to 'result.txt'
+\end{verbatim}
+A final check comparing the input and output files confirmed that the transfer was accurate and complete.
+
+\section{Discussion}
+\subsection{Comparison with TCP Sockets}
+\begin{itemize}
+    \item MPI abstracts the complexity of manual socket creation and connection management.
+    \item Communication is addressed logically by \textbf{process rank}, rather than by specific IP addresses and port numbers.
+\end{itemize}
+
+\subsection{Comparison with RPC}
+\begin{itemize}
+    \item MPI relies on \textbf{explicit message passing} operations (Send/Recv).
+    \item While simpler for this specific task, MPI does not provide the automatic data marshalling and interface definition languages found in RPC frameworks like gRPC.
+\end{itemize}
+Although MPI is traditionally favored for high-performance parallel computing, it proved to be a viable and efficient solution for this distributed file transfer exercise.
+
+\section{Conclusion}
+This practical work successfully realized a file transfer system using MPI. It serves as a concluding comparison in our exploration of distributed systems, highlighting the differences between direct socket manipulation, structured Remote Procedure Calls, and MPI-based message passing.
+
+\end{document}
